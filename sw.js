@@ -1,6 +1,6 @@
 'use strict';
 // Bump VERSION whenever any precached file changes. Keep updates atomic.
-const VERSION='v4';
+const VERSION='v6';
 const PREFIX=`able-flow:${encodeURIComponent(self.registration.scope)}:`;
 const CACHE=PREFIX+VERSION;
 const ROOT=new URL(self.registration.scope);

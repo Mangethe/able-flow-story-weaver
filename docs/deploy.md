@@ -112,9 +112,9 @@ An authenticated session and matching learner profile must already exist. The
 current prototype has the adapter, not a client-provisioning or sign-in interface.
 See [Supabase setup](../supabase/README.md) and the root README's sync contract.
 
-Every choice is saved locally before an unawaited upsert. Offline or unconfigured
-deployments make no Supabase calls. Startup accepts valid remote progress only if
-its timestamp is newer. There are no real-time subscriptions. Learners sharing
+Every choice is saved locally before a serialized background revision-checked save. Offline or unconfigured
+deployments make no Supabase calls. Startup/reconnect adopt newer server revisions only for clean local progress;
+unsynced branches require explicit conflict resolution. See [sync details](sync.md). There are no real-time subscriptions. Learners sharing
 one anonymous browser session also share its profile; distinct learners need
 separate managed sessions before a production rollout.
 

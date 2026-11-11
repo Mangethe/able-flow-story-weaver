@@ -1,99 +1,89 @@
-const assert = require('node:assert/strict');
-module.exports = async function verifySync(boot) {
-  const results=[],url='http://localhost:8787/sub/index.html';
-  const flush=()=>new Promise(resolve=>setImmediate(resolve));
-  const pending=()=>{let resolve;const promise=new Promise(done=>resolve=done);return {promise,resolve};};
-  const choices=[{node_id:'garden',choice_id:'water',target_node_id:'pond'}];
-  const remote=(updated_at='2030-01-01T00:00:00.000Z')=>({profile_id:'profile-a',story_id:'folktale-1',current_node_id:'pond',choices_made:choices,updated_at});
-  const saved=(updatedAt,path=['garden'])=>JSON.stringify({storyId:'folktale-1',version:1,profileId:'profile-a',path,updatedAt});
-  function setup({online=true,read=Promise.resolve({data:null,error:null}),write=Promise.resolve({error:null}),storage={},profileId='profile-a',clientMissing=false}={}) {
-    const calls=[]; let w;
-    const client={from(table){
-      assert.equal(table,'story_progress');
-      const query={
-        select(columns){calls.push({type:'select',columns});return this;},
-        eq(column,value){calls.push({type:'eq',column,value});return this;},
-        order(column,options){calls.push({type:'order',column,options});return this;},
-        limit(value){calls.push({type:'limit',value});return this;},
-        maybeSingle(){return read;},
-        upsert(row,options){
-          // This assertion runs inside the client call, before its promise settles.
-          const local=JSON.parse(w.localStorage.getItem('able-flow-progress'));
-          assert.equal(local.path.at(-1),row.current_node_id);
-          assert.deepEqual(JSON.parse(JSON.stringify(local.choicesMade)),JSON.parse(JSON.stringify(row.choices_made)));
-          calls.push({type:'upsert',row:JSON.parse(JSON.stringify(row)),options:JSON.parse(JSON.stringify(options))});
-          return typeof write==='function'?write():write;
-        }
-      };return query;
+const assert=require('node:assert/strict');
+module.exports=async function verifySync(boot){
+  const results=[],url='http://localhost:8787/sub/index.html',flush=()=>new Promise(resolve=>setImmediate(resolve));
+  const clone=v=>JSON.parse(JSON.stringify(v));
+  const deferred=()=>{let resolve;const promise=new Promise(done=>resolve=done);return {promise,resolve};};
+  const water=[{node_id:'garden',choice_id:'water',target_node_id:'pond'}];
+  const row=(revision=1)=>({profile_id:'profile-a',story_id:'folktale-1',story_version:1,current_node_id:'pond',choices_made:water,revision,updated_at:'1900-01-01T00:00:00Z',last_mutation_id:null});
+  function service(initial=null){
+    let current=initial&&clone(initial);return {get row(){return current;},save(p){
+      if(current?.last_mutation_id===p.p_mutation_id)return {status:'saved',progress:clone(current)};
+      if((current?.revision||0)!==p.p_expected_revision)return {status:'conflict',progress:current&&clone(current)};
+      current={...row((current?.revision||0)+1),story_version:p.p_story_version,current_node_id:p.p_current_node_id,choices_made:clone(p.p_choices_made),last_mutation_id:p.p_mutation_id};return {status:'saved',progress:clone(current)};
     }};
-    const app=boot(url,storage,window=>{
-      w=window;Object.defineProperty(w.navigator,'onLine',{configurable:true,value:online});
-      w.ABLE_FLOW_CONFIG={supabaseClient:clientMissing?null:client,profileId};
-    });
-    return {app,calls};
   }
-  for(const options of [{online:false},{clientMissing:true},{profileId:null}]) {
-    const {app,calls}=setup(options); app.press();app.choose('choice-water');
-    assert.equal(JSON.parse(app.w.localStorage.getItem('able-flow-progress')).path.at(-1),'pond');
-    await flush();assert.equal(calls.length,0);assert.equal(app.d.body.dataset.scanState,'SCANNING');app.dom.window.close();
+  function setup({server=service(),online=true,profileId='profile-a',localProfileId,clientMissing=false,storage={},read,write}={}){
+    const calls=[];let window;
+    const client={from(table){assert.equal(table,'story_progress');const q={select(){return q;},eq(column,value){calls.push({type:'filter',column,value});return q;},maybeSingle(){calls.push({type:'read'});return read?read():Promise.resolve({data:server.row&&clone(server.row),error:null});}};return q;},rpc(name,params){
+      assert.equal(name,'save_story_progress');assert.equal(params.p_story_version,1);assert.equal(params.profile_id,undefined);
+      const local=JSON.parse(window.localStorage.getItem(window.eval('progressKey')));
+      assert.equal(local.sync.pending,true);assert.equal(local.sync.inFlight.mutationId,params.p_mutation_id);
+      calls.push({type:'write',params:clone(params)});return write?write(params):Promise.resolve({data:server.save(params),error:null});
+    }};
+    const app=boot(url,storage,w=>{window=w;Object.defineProperty(w.navigator,'onLine',{configurable:true,value:online});w.ABLE_FLOW_CONFIG={supabaseClient:clientMissing?null:client,profileId,localProfileId};});
+    return {app,calls,server,key:()=>app.w.eval('progressKey'),saved:()=>JSON.parse(app.w.localStorage.getItem(app.w.eval('progressKey'))),reconnect(){Object.defineProperty(app.w.navigator,'onLine',{configurable:true,value:true});app.w.dispatchEvent(new app.w.Event('online'));}};
   }
-  results.push('E: offline/unconfigured/missing-profile play saves locally and makes no Supabase calls');
+  for(const options of [{online:false},{clientMissing:true},{profileId:null}]){
+    const t=setup(options);t.app.press();t.app.choose('choice-water');assert.equal(t.saved().path.at(-1),'pond');assert.equal(t.saved().sync.pending,true);assert.equal(t.calls.length,0);t.app.dom.window.close();
+  }
+  results.push('E: offline/unconfigured choices save scoped pending progress before network calls');
   {
-    const read=pending(),write=pending();const {app,calls}=setup({read:read.promise,write:write.promise});
-    assert.equal(app.d.getElementById('node-title').textContent,'A place to pause');
-    assert.equal(app.d.body.dataset.scanState,'READY');
-    app.press();app.choose('choice-water');
-    const first=JSON.parse(app.w.localStorage.getItem('able-flow-progress'));
-    assert.ok(Number.isFinite(Date.parse(first.updatedAt)));assert.deepEqual(first.choicesMade,choices);
-    assert.equal(calls.filter(call=>call.type==='upsert').length,1);
-    assert.deepEqual(calls.find(call=>call.type==='upsert').options,{onConflict:'profile_id,story_id'});
-    assert.equal(app.d.getElementById('progress').textContent,'Story complete');
-    assert.equal(app.w.eval('scanIndex'),0);assert.equal(app.d.activeElement.id,'back');
-    app.choose('back');app.choose('choice-shade');
-    assert.equal(calls.filter(call=>call.type==='upsert').length,3,'Every choice/action fires without waiting for prior I/O');
-    const current=JSON.parse(app.w.localStorage.getItem('able-flow-progress'));
-    read.resolve({data:remote('2020-01-01T00:00:00.000Z'),error:null});write.resolve({error:null});
-    await flush();assert.equal(app.w.localStorage.getItem('able-flow-progress'),JSON.stringify(current));
-    assert.equal(app.d.getElementById('node-title').textContent,'Under the tree');
-    assert.deepEqual(calls.filter(call=>call.type==='eq').map(call=>[call.column,call.value]),[['profile_id','profile-a'],['story_id','folktale-1']]);
-    assert.equal(calls.filter(call=>call.type==='select').length,1);
-    app.dom.window.close();
+    const held=deferred(),server=service();let first=true;
+    const t=setup({server,write:p=>{if(first){first=false;return held.promise.then(()=>({data:server.save(p),error:null}));}return Promise.resolve({data:server.save(p),error:null});}});await flush();
+    t.app.press();t.app.choose('choice-water');t.app.choose('back');t.app.choose('choice-shade');
+    assert.equal(t.calls.filter(c=>c.type==='write').length,1);assert.equal(t.saved().path.at(-1),'tree');assert.equal(t.app.d.activeElement.id,'back');assert.equal(t.app.timers.size,1);
+    held.resolve();await flush();assert.equal(t.calls.filter(c=>c.type==='write').length,2);assert.equal(server.row.current_node_id,'tree');assert.equal(server.row.revision,2);assert.equal(t.saved().sync.pending,false);t.app.dom.window.close();
   }
-  results.push('E: local write precedes upsert; hung requests never block render/scanning or later choices; startup read is profile/story filtered');
+  results.push('E: one active cloud save, immediate rendering and coalesced latest pending snapshot');
   {
-    const {app,calls}=setup({read:Promise.resolve({data:remote(),error:null}),storage:{'able-flow-progress':saved('2020-01-01T00:00:00.000Z')}});
-    await flush();const merged=JSON.parse(app.w.localStorage.getItem('able-flow-progress'));
-    assert.equal(merged.updatedAt,'2030-01-01T00:00:00.000Z');assert.deepEqual(merged.path,['garden','pond']);
-    assert.equal(app.d.getElementById('node-title').textContent,'By the water');
-    assert.equal(app.d.body.dataset.scanState,'READY');assert.equal(app.d.activeElement.id,'scan');
-    assert.equal(calls.filter(call=>call.type==='upsert').length,0,'A pull does not echo an upsert');app.dom.window.close();
+    const t=setup({online:false});t.app.press();t.app.choose('choice-water');const key=t.key(),snapshot=t.app.w.localStorage.getItem(key);t.app.dom.window.close();
+    const reload=setup({online:false,server:t.server,storage:{[key]:snapshot}});assert.equal(reload.app.d.getElementById('node-title').textContent,'By the water');reload.reconnect();await flush();
+    assert.equal(t.server.row.current_node_id,'pond');assert.equal(reload.saved().sync.pending,false);assert.ok(reload.calls.some(c=>c.type==='filter'&&c.column==='story_version'));reload.app.dom.window.close();
   }
-  results.push('E: newer remote progress merges to localStorage with its original timestamp and renders without losing focus');
-  for(const stamp of ['2019-01-01T00:00:00.000Z','2020-01-01T00:00:00.000Z']) {
-    const value=saved('2020-01-01T00:00:00.000Z');
-    const {app}=setup({read:Promise.resolve({data:remote(stamp),error:null}),storage:{'able-flow-progress':value}});
-    await flush();assert.equal(app.w.localStorage.getItem('able-flow-progress'),value);
-    assert.equal(app.d.getElementById('node-title').textContent,'A place to pause');app.dom.window.close();
-  }
-  results.push('E: equal or older remote timestamps leave localStorage and the current node unchanged');
-  for(const data of [{...remote(),profile_id:'other-profile'},{...remote(),story_id:'other-story'},{...remote(),updated_at:'broken'},{...remote(),current_node_id:'missing'},{...remote(),choices_made:[{node_id:'garden',choice_id:'shade',target_node_id:'pond'}]},null]) {
-    const {app}=setup({read:Promise.resolve({data,error:null})});await flush();
-    assert.equal(app.w.localStorage.getItem('able-flow-progress'),null);assert.equal(app.d.getElementById('node-title').textContent,'A place to pause');app.dom.window.close();
-  }
-  results.push('E: invalid/missing/wrong-profile/wrong-story remote records cannot corrupt local progress');
-  for(const sdkError of [false,true]) {
-    const {app}=setup({read:sdkError?Promise.resolve({data:null,error:new Error('SDK read error')}):Promise.reject(new Error('Network read error')),write:()=>sdkError?Promise.resolve({error:new Error('SDK write error')}):Promise.reject(new Error('Network write error'))});
-    app.press();app.choose('choice-shade');await flush();
-    assert.equal(app.d.getElementById('node-title').textContent,'Under the tree');
-    assert.equal(app.d.activeElement.id,'back');assert.deepEqual(app.errors,[]);app.dom.window.close();
-  }
-  results.push('E: thrown network failures and returned SDK errors are caught without interrupting play');
+  results.push('E: offline pending state survives reload and retries on reconnect with story version');
   {
-    const read=pending();const {app}=setup({read:read.promise});app.press();app.tick();
-    read.resolve({data:remote(),error:null});await flush();
-    assert.equal(app.d.body.dataset.scanState,'SCANNING');assert.equal(app.w.eval('scanIndex'),0);assert.equal(app.d.activeElement.id,'back');assert.equal(app.timers.size,1);
-    assert.equal(app.d.querySelector('[aria-current="true"]'),app.d.activeElement);app.dom.window.close();
+    const server=service();let fail=true;const t=setup({server,write:p=>{const data=server.save(p);if(fail){fail=false;return Promise.reject(new Error('Lost acknowledgement'));}return Promise.resolve({data,error:null});}});await flush();t.app.press();t.app.choose('choice-water');await flush();
+    assert.equal(server.row.revision,1);const key=t.key(),snapshot=t.app.w.localStorage.getItem(key),id=t.saved().sync.inFlight.mutationId;t.app.dom.window.close();
+    const reload=setup({server,storage:{[key]:snapshot}});await flush();assert.equal(server.row.revision,1);assert.equal(reload.calls.find(c=>c.type==='write').params.p_mutation_id,id);assert.equal(reload.saved().sync.pending,false);reload.app.dom.window.close();
   }
-  results.push('E: a newer startup pull during scanning restarts at index zero with one timer and aligned current/focus');
+  results.push('E: ambiguous attempts retry their persisted mutation ID idempotently after reload');
+  {
+    const server=service(row(7)),t=setup({server,online:false});t.app.press();t.app.choose('choice-shade');t.reconnect();await flush();
+    assert.equal(t.app.d.getElementById('node-title').textContent,'Under the tree');assert.equal(t.app.d.getElementById('sync-conflict').hidden,false);assert.equal(t.calls.filter(c=>c.type==='write').length,0);
+    t.app.choose('keep-local');await flush();assert.equal(server.row.revision,8);assert.equal(server.row.current_node_id,'tree');assert.equal(t.saved().sync.pending,false);t.app.dom.window.close();
+  }
+  results.push('E: conflicts preserve local work until scannable Keep this device explicitly rebases');
+  {
+    const server=service(row(5)),t=setup({server,online:false});t.app.press();t.app.choose('choice-shade');t.reconnect();await flush();t.app.choose('use-cloud');
+    assert.equal(t.saved().path.at(-1),'pond');assert.equal(t.saved().sync.pending,false);assert.equal(JSON.parse(t.app.w.localStorage.getItem(t.key()+':conflict-backup')).path.at(-1),'tree');assert.equal(t.app.d.activeElement.id,'back');t.app.dom.window.close();
+  }
+  results.push('E: Use cloud preserves an unsynced branch in a scoped conflict backup');
+  {
+    const server=service(row()),a=setup({server}),b=setup({server});await flush();a.app.press();a.app.choose('back');a.app.choose('choice-shade');await flush();b.app.press();b.app.choose('back');await flush();
+    assert.equal(server.row.current_node_id,'tree');assert.ok(b.saved().sync.conflict);assert.equal(b.saved().sync.pending,true);a.app.dom.window.close();b.app.dom.window.close();
+  }
+  results.push('E: colliding clients cannot silently overwrite a newer revision');
+  {
+    const key='able-flow-progress:auth%3Aprofile-a:folktale-1:v1',record={storyId:'folktale-1',version:1,profileId:'profile-a',profileScope:'auth:profile-a',path:['garden','pond'],choicesMade:water,sync:{revision:9,sequence:1,pending:false,inFlight:null,conflict:null},updatedAt:'2999-01-01T00:00:00Z'};
+    const t=setup({server:service(row(10)),storage:{[key]:JSON.stringify(record)}});await flush();assert.equal(t.saved().sync.revision,10);t.app.dom.window.close();
+    for(const profileId of ['profile-b',null]){const other=setup({profileId,online:false,storage:{[key]:JSON.stringify(record),'able-flow-progress':JSON.stringify(record)}});assert.equal(other.app.d.getElementById('node-title').textContent,'A place to pause');assert.notEqual(other.key(),key);other.app.dom.window.close();}
+    const version=setup({online:false,storage:{[key.replace(':v1',':v2')]:JSON.stringify({...record,version:2})}});assert.equal(version.app.d.getElementById('node-title').textContent,'A place to pause');version.app.dom.window.close();
+  }
+  results.push('E: device clock skew is ignored and local keys isolate profiles and story versions');
+  for(const bad of [{...row(),story_version:2},{...row(),profile_id:'another'},{...row(),revision:-1},{...row(),current_node_id:'missing'}]){
+    const t=setup({server:service(bad)});await flush();assert.equal(t.app.d.getElementById('node-title').textContent,'A place to pause');assert.equal(t.calls.filter(c=>c.type==='write').length,0);t.app.dom.window.close();
+  }
+  results.push('E: incompatible or corrupt remote records cannot replace local progress');
+  {
+    let fail=true;const t=setup({write:p=>fail?Promise.resolve({error:new Error('SDK error')}):Promise.resolve({data:t.server.save(p),error:null})});await flush();t.app.press();t.app.choose('choice-water');await flush();assert.equal(t.saved().sync.pending,true);assert.ok(t.saved().sync.inFlight);assert.deepEqual(t.app.errors,[]);fail=false;t.reconnect();await flush();assert.equal(t.saved().sync.pending,false);t.app.dom.window.close();
+  }
+  results.push('E: failures retain pending work for reconnect without interrupting scanning');
+  {
+    const held=deferred(),t=setup({read:()=>held.promise});t.app.press();t.app.choose('choice-shade');
+    assert.equal(t.calls.filter(c=>c.type==='write').length,0);held.resolve({data:row(4),error:null});await flush();
+    assert.equal(t.saved().path.at(-1),'tree');assert.ok(t.saved().sync.conflict);assert.equal(t.calls.filter(c=>c.type==='write').length,0);t.app.dom.window.close();
+    const a=setup({profileId:null,localProfileId:'class-a',online:false}),b=setup({profileId:null,localProfileId:'class-b',online:false});assert.notEqual(a.key(),b.key());a.app.dom.window.close();b.app.dom.window.close();
+  }
+  results.push('E: a delayed startup read cannot erase a new choice; unauthenticated local profile scopes are separate');
   return results;
 };

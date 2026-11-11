@@ -19,9 +19,12 @@ has been applied to that project. Do not reapply it to the existing tables.
 | `story_id` | Required nonblank text, up to 200 characters |
 | `current_node_id` | Required nonblank text, up to 200 characters |
 | `choices_made` | JSONB array; defaults to `[]` |
+| `story_version` | Positive integer content version; default 1 |
+| `revision` | Server revision; starts at 1 and increments atomically |
+| `last_mutation_id` | UUID for idempotent retry acknowledgement |
 | `updated_at` | `timestamptz`; overwritten by a server trigger on insert/update |
 
-One progress row is allowed per `(profile_id, story_id)` to support upserts.
+One progress row is allowed per `(profile_id, story_id, story_version)`. Progress writes use the revision-checked RPC, not direct upserts.
 Deleting a profile cascades to its progress; deleting its Auth user cascades to
 the profile. Story IDs and node IDs refer to locally embedded content, so there
 is no remote story table or runtime story download.
@@ -38,7 +41,9 @@ Both tables have RLS enabled and four explicit owner-only policies (SELECT, INSE
 UPDATE, DELETE). Profile ownership requires `id = auth.uid()`; progress ownership
 requires `profile_id = auth.uid()`. Both UPDATE policies have USING and WITH CHECK
 conditions so a user cannot transfer rows to another profile. Only authenticated
-users receive table CRUD grants; the unauthenticated `anon` role receives none.
+users can modify their own profiles. Progress INSERT/UPDATE grants are revoked;
+only the owner-checking `save_story_progress` RPC can write progress. The
+unauthenticated `anon` role receives neither table nor RPC access.
 
 Supabase anonymous sign-ins create real Auth users with the `authenticated` role,
 so these policies work without an email or password. A publishable/anon API key
@@ -68,14 +73,12 @@ and must never be treated as authorization by itself.
 two temporary anonymous Auth identities, switches to the actual `authenticated`
 Postgres role and sets each JWT subject. It verifies:
 
-- Each identity can create/read/update/delete its own profile and progress.
-- Each sees only one profile and its own progress; the other identity stays hidden.
-- Cross-user inserts, updates, deletes and ownership transfers are rejected or
-  affect zero rows.
-- Own progress upserts succeed; object-valued choice history violates the array
-  constraint; the timestamp trigger overwrites client timestamps.
-- Profile deletion cascades only to its own progress.
-- The unauthenticated role cannot read either table and has no CRUD/TRUNCATE grant.
+- Atomic revision creation/update, stale-revision conflicts and idempotent retry.
+- Independent rows for content versions 1 and 2.
+- Owner-only RPC writes and reads; another learner cannot see or delete them.
+- Direct progress INSERT/UPDATE cannot bypass revision checks.
+- Invalid JSON choice history is rejected; own-profile deletion cascades safely.
+- Unauthenticated table reads and RPC execution are denied.
 
 The entire test transaction rolls back. Post-test inspection confirmed both tables
 contain zero rows and both have RLS enabled. The security advisor reported no
@@ -88,12 +91,9 @@ table: their policies deliberately include anonymous Auth users via the
 This tests database authorization and verifies the saved dashboard setting; it
 does not constitute an actual anonymous Auth endpoint sign-in test.
 
-The optional client adapter is now inlined in `index.html`. It saves locally first,
-then attempts an unawaited upsert on each choice when online and configured. On
-startup it fetches the configured profile/story's latest row and merges only when
-the server timestamp is strictly newer. Its default client/profile configuration
-is null, and it adds no SDK download, embedded key or runtime storytelling dependency.
-See the root README for `window.ABLE_FLOW_CONFIG` setup. Provision the authenticated
-user's profile before configuring sync; the adapter does not create Auth users or
-profiles. Sync behavior is tested with mocked clients; database ownership remains
-covered separately by the rolled-back SQL tests described above.
+The optional client adapter is inlined in `index.html`, serializes background saves,
+retains the latest pending state, persists ambiguous attempts for reconnect/reload,
+and uses explicit revision conflicts instead of comparing device/server clocks.
+Both the initial migration and the version/revision migration have been applied.
+See [the current sync contract](../docs/sync.md). The adapter remains unconfigured
+by default and adds no SDK download, embedded key or core runtime dependency.

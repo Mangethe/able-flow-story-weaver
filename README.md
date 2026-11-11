@@ -107,19 +107,24 @@ client) and `profileId` (that session's user ID). Both default to null. The matc
 `learner_profiles` row must already exist. No SDK download, keys, sign-in UI or
 profile provisioning is added to the story app.
 
-Every choice saves the path, exact choice history and local `updatedAt` to
-`localStorage` synchronously, then fires an unawaited `story_progress` upsert only
-when online and configured. The server maintains its own `updated_at`. On startup,
-one unawaited query fetches that profile/story's latest row. Valid remote progress
-merges into local storage and the display only when its timestamp is strictly
-newer than the latest local save, including saves made while the query was pending.
-Equal/older records leave local progress untouched. Legacy local saves without a
-timestamp can be replaced by valid timestamped remote progress.
+Every choice saves synchronously to a profile/story/version-scoped local key,
+marks pending sync, then returns immediately to rendering. One background save runs
+at a time; later choices retain only the latest pending snapshot. Startup and
+reconnect retry persisted work. Cloud writes use the atomic `save_story_progress`
+RPC with an expected server revision and idempotent mutation ID. Device timestamps
+never resolve conflicts. Conflicts preserve local work and offer scannable **Keep
+this device** / **Use cloud** choices, with a local backup before adopting cloud
+progress. See [docs/sync.md](docs/sync.md) for the policy and migration details.
 
-There is no real-time subscription, polling, reconnection queue or retry loop.
-Supabase failures are caught and logged; local play continues. If the browser
-denies local storage, play continues in memory as before. Configuring sync enables
-remote transmission of progress; leaving the configuration empty keeps play local.
+Symbols remain visible by default; unverified gloss is hidden. Educators can use
+the scannable **Symbols** and **Draft gloss preview** preferences, saved per profile.
+Text choice labels remain present in both symbol modes.
+
+`.github/workflows/application-tests.yml` runs `node tests/verify.cjs E` independently
+of the AI review, with Node 24.11.0 and jsdom 29.1.1 in an isolated QA directory.
+No API key or Supabase account is needed for these deterministic tests. The app
+still has no build dependency. Target-device test results remain open in
+[docs/accessibility-results.md](docs/accessibility-results.md); release is blocked.
 
 ## Structured security-review gate
 

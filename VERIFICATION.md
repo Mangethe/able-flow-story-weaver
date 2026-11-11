@@ -188,3 +188,28 @@ The new story has not been manually checked on a low-end Android tablet or the
 school server's browser. Offline installed cold start, forced-colors visibility
 and actual NVDA/TalkBack announcements remain unverified. The target-device release
 gate remains blocked; no production deployment or release is claimed.
+
+## Sync revisions, display preferences and Edge verification — 2026-11-12
+
+The current worker is v6. Background cloud writes are serialized and coalesced,
+pending mutations survive reload/reconnect, and server revisions plus idempotent
+mutation IDs replace device-clock conflict ordering. Profile/story/version scopes
+isolate local saves. Cloud progress includes story version. Draft gloss is hidden
+by default and presentation preferences are scannable. The separate application
+CI job runs the deterministic verification suite with pinned QA dependencies.
+
+`node tests/verify.cjs E` passed all 42 grouped application checks after the Edge
+focus-spacing fix. The security-contract suite previously passed all five tests.
+The versioned progress migration and rollback-only ownership/CAS SQL checks were
+applied and exercised through Supabase. SDK mocks do not establish real classroom
+anonymous-auth or screen-reader behavior.
+
+Native Edge Beta manual testing reached both story endings, Back, Restart and the
+waiting worker update using Spacebar. Cached reload and saved-state recovery worked
+with the task-owned origin server stopped. Actual forced-colors emulation revealed
+a viewport-edge outline issue; button scroll margin fixed the reproduced case and
+was manually retested. Partial 200% reflow inspection passed. Detailed evidence and
+limits are in `docs/accessibility-results.md`.
+
+Installed offline cold start awaits installation permission. NVDA/TalkBack and the
+complete target-device checklist remain unverified. Release remains blocked.

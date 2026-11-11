@@ -11,6 +11,7 @@
 :root{color-scheme:light;--bg:#f4f2e9;--panel:#fff;--text:#152f29;--muted:#435c54;--accent:#123c35;--on-accent:#fff;--line:#65776f;--focus:#a53b00}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:1.1rem/1.6 system-ui,sans-serif}body.contrast{color-scheme:dark;--bg:#000;--panel:#000;--text:#fff;--muted:#fff;--accent:#fff;--on-accent:#000;--line:#fff;--focus:#ffdf00}
 header,main,footer{width:min(54rem,100%);margin:auto;padding:1.25rem}header{border-bottom:1px solid var(--line)}.eyebrow{font-size:.8rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(2rem,6vw,3.3rem);line-height:1.15;margin:.5rem 0}h2{line-height:1.25}p{max-width:65ch}.muted{color:var(--muted)}article,.settings{padding:clamp(1rem,4vw,2rem);background:var(--panel);border:1px solid var(--line);border-radius:1rem;margin:1.25rem 0}button{font:inherit;text-align:left;cursor:pointer;min-height:3.5rem;padding:.8rem 1rem;color:var(--text);background:var(--panel);border:2px solid var(--line);border-radius:.65rem}button:hover{border-color:var(--text)}button:disabled{opacity:.55;cursor:default}button.primary{background:var(--accent);color:var(--on-accent)}button:focus-visible,.scan-focus{outline:4px solid var(--focus);outline-offset:4px}.controls{display:flex;flex-wrap:wrap;gap:1rem}.controls button{flex:1 1 12rem}.choices{display:grid;gap:1rem;margin:1.5rem 0}button[hidden],[hidden]{display:none!important}.badge{font-size:.85rem;border:1px solid var(--line);padding:.25rem .6rem;border-radius:2rem;display:inline-block}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}footer{font-size:.9rem}svg.icon{width:3rem;height:3rem;flex-shrink:0}.choice{display:flex;align-items:center;gap:1rem}.gloss{display:block;font-size:.9rem;color:var(--muted);margin-top:.4rem}#node-icon svg{width:5rem;height:5rem}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}@media(forced-colors:active){.scan-focus{outline-color:Highlight}}
+button{min-width:0;overflow-wrap:anywhere;scroll-margin:1rem}.hide-symbols svg.icon{display:none}@media(forced-colors:active){button.scan-focus{outline:4px solid Highlight;outline-offset:4px;border-color:ButtonText}}
 </style>
 </head>
 <body data-scan-interval="2000">
@@ -22,7 +23,8 @@ header,main,footer{width:min(54rem,100%);margin:auto;padding:1.25rem}header{bord
 <article id="story" aria-labelledby="node-title"><div id="node-icon"></div><p class="eyebrow" id="progress">Story space</p><h2 id="node-title">Ready when you are</h2><p id="node-text">Story content will appear here.</p><p id="node-gloss" class="gloss" hidden></p><div id="choices" class="choices"></div></article>
 <div class="controls"><button id="back" data-scan disabled>Go back</button><button id="restart" data-scan disabled>Start again</button></div>
 <div class="controls"><button id="scan" class="primary" data-scan>Start scanning</button></div>
-<section class="settings" aria-labelledby="settings-title"><h2 id="settings-title">Make yourself comfortable</h2><div class="controls"><button id="speed" data-scan>Scan speed: 2 seconds</button><button id="contrast" data-scan aria-pressed="false">High contrast</button></div></section>
+<section class="settings" aria-labelledby="settings-title"><h2 id="settings-title">Make yourself comfortable</h2><div class="controls"><button id="speed" data-scan>Scan speed: 2 seconds</button><button id="contrast" data-scan aria-pressed="false">High contrast</button><button id="symbols" data-scan aria-pressed="true">Symbols: on</button><button id="gloss" data-scan aria-pressed="false">Draft gloss preview: off</button></div><p class="muted">Educators can preview draft gloss. It is unverified and hidden by default.</p></section>
+<section id="sync-conflict" class="settings" aria-labelledby="conflict-title" hidden><h2 id="conflict-title">Two saved versions need a choice</h2><p>Your progress on this device is safe. Choose which version to continue with.</p><div class="controls"><button id="keep-local" data-scan>Keep this device's progress</button><button id="use-cloud" data-scan>Use cloud progress</button></div></section>
 <p id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
 </main>
 <footer>Space / Enter to select · Tab to explore · Your progress stays on this device.<p id="install-status">Direct-file mode works without installation.</p><div class="controls"><button id="install" data-scan hidden>Install ABLE-FLOW</button><button id="update" data-scan hidden>Save progress and update</button></div></footer>
@@ -32,7 +34,9 @@ const $=id=>document.getElementById(id);
 // Optional preconfigured, authenticated client. No keys, SDK downloads or auth
 // requests are needed for local play. Supply this object before this script.
 const config={supabaseClient:null,profileId:null,...window.ABLE_FLOW_CONFIG};
-const settings={contrast:false};
+const profileScope=config.profileId?'auth:'+config.profileId:'local:'+(config.localProfileId||'default');
+const settingsKey='able-flow-settings:'+encodeURIComponent(profileScope);
+const settings={contrast:false,showSymbols:true,showGloss:false};
 const scanner={state:'READY',timer:null,held:false,targets:[]};
 let scanIndex=0;
 function scanInterval(){const value=Number(document.body.dataset.scanInterval);return Number.isInteger(value)&&value>0&&value<=2147483647?value:2000;}
@@ -75,9 +79,11 @@ document.addEventListener('click',()=>{if(scanner.state==='ACTIVATING')startScan
 $('scan').addEventListener('click',()=>scanner.state==='SCANNING'||scanner.state==='ACTIVATING'?pauseScan():startScan());
 $('speed').addEventListener('click',()=>{const speeds=[1000,2000,3000,5000];document.body.dataset.scanInterval=String(speeds[(speeds.indexOf(scanInterval())+1)%speeds.length]);applySettings();saveSettings();});
 $('contrast').addEventListener('click',()=>{settings.contrast=!settings.contrast;applySettings();saveSettings();});
-function applySettings(){document.body.classList.toggle('contrast',settings.contrast);$('contrast').setAttribute('aria-pressed',String(settings.contrast));$('speed').textContent=`Scan speed: ${scanInterval()/1000} seconds`;}
-function saveSettings(){try{localStorage.setItem('able-flow-settings',JSON.stringify({...settings,speed:scanInterval()}));}catch(error){console.info('Settings remain in memory.',error);}}
-try{const saved=JSON.parse(localStorage.getItem('able-flow-settings'));if(saved){if([1000,2000,3000,5000].includes(saved.speed))document.body.dataset.scanInterval=String(saved.speed);settings.contrast=saved.contrast===true;}}catch(error){console.info('Using default settings.',error);}applySettings();
+$('symbols').addEventListener('click',()=>{settings.showSymbols=!settings.showSymbols;applySettings();saveSettings();renderNode();});
+$('gloss').addEventListener('click',()=>{settings.showGloss=!settings.showGloss;applySettings();saveSettings();renderNode();});
+function applySettings(){document.body.classList.toggle('contrast',settings.contrast);document.body.classList.toggle('hide-symbols',!settings.showSymbols);$('contrast').setAttribute('aria-pressed',String(settings.contrast));$('symbols').setAttribute('aria-pressed',String(settings.showSymbols));$('symbols').textContent=`Symbols: ${settings.showSymbols?'on':'off'}`;$('gloss').setAttribute('aria-pressed',String(settings.showGloss));$('gloss').textContent=`Draft gloss preview: ${settings.showGloss?'on':'off'}`;$('speed').textContent=`Scan speed: ${scanInterval()/1000} seconds`;}
+function saveSettings(){try{localStorage.setItem(settingsKey,JSON.stringify({...settings,speed:scanInterval()}));}catch(error){console.info('Settings remain in memory.',error);}}
+try{const saved=JSON.parse(localStorage.getItem(settingsKey));if(saved){if([1000,2000,3000,5000].includes(saved.speed))document.body.dataset.scanInterval=String(saved.speed);settings.contrast=saved.contrast===true;settings.showSymbols=saved.showSymbols!==false;settings.showGloss=saved.showGloss===true;}}catch(error){console.info('Using default settings.',error);}applySettings();
 document.addEventListener('keydown',event=>{if(event.key==='Tab'){pauseScan('PAUSED',false);return;}if(event.key!==' '&&event.key!=='Enter')return;event.preventDefault();if(event.repeat||scanner.held)return;scanner.held=true;selectCurrent();});
 document.addEventListener('keyup',event=>{if(event.key===' '||event.key==='Enter')scanner.held=false;});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){scanner.held=false;pauseScan('SUSPENDED');}});
@@ -90,7 +96,7 @@ const iconLibrary={
   fallback:['M12 12H52V52H12Z','M25 24Q25 16 33 17Q44 19 35 30L32 33V38','M32 44V46']
 };
 function renderIcon(reference){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('icon');svg.setAttribute('viewBox','0 0 64 64');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','3');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');for(const d of iconLibrary[reference]||iconLibrary.fallback){const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',d);svg.append(path);}return svg;}
-function addChoiceContent(button,choice){button.replaceChildren(renderIcon(choice.aacIconRef));const content=document.createElement('span');const label=document.createElement('span');label.textContent=choice.text;content.append(label);if(choice.sslGloss){const gloss=document.createElement('span');gloss.className='gloss';gloss.id=`gloss-${choice.id}`;gloss.textContent=`Draft SSL gloss: ${choice.sslGloss}`;content.append(gloss);button.setAttribute('aria-describedby',gloss.id);}button.setAttribute('aria-label',choice.text);button.append(content);}
+function addChoiceContent(button,choice){button.replaceChildren(renderIcon(choice.aacIconRef));const content=document.createElement('span');const label=document.createElement('span');label.textContent=choice.text;content.append(label);if(settings.showGloss&&choice.sslGloss){const gloss=document.createElement('span');gloss.className='gloss';gloss.id=`gloss-${choice.id}`;gloss.textContent=`Draft SSL gloss: ${choice.sslGloss}`;content.append(gloss);button.setAttribute('aria-describedby',gloss.id);}button.setAttribute('aria-label',choice.text);button.append(content);}
 // All narrative content is embedded: no runtime fetch is needed.
 // Embedded copy of seed/stories/folktale-1.json; keep both in sync.
 const story={
@@ -161,6 +167,9 @@ function validateStory(data){
   if(finishable.size!==entries.length)fail('a node has no route to an ending');
 }
 let historyPath=[story.startNodeId],choicesMade=[],progressUpdatedAt=null;
+const progressKey='able-flow-progress:'+encodeURIComponent(profileScope)+':'+encodeURIComponent(story.storyId)+':v'+story.version;
+let syncState={revision:0,sequence:0,pending:false,inFlight:null,conflict:null};
+let syncRunning=false,syncReady=false,refreshRunning=false;
 function validPath(path){return Array.isArray(path)&&path.length>0&&path.length<=1000&&path[0]===story.startNodeId&&path.every((id,i)=>Object.hasOwn(story.nodes,id)&&(i===0||story.nodes[path[i-1]].choices.some(choice=>choice.targetNodeId===id)));}
 function choicesForPath(path){return path.slice(1).map((id,i)=>({node_id:path[i],choice_id:story.nodes[path[i]].choices.find(choice=>choice.targetNodeId===id).id,target_node_id:id}));}
 function pathForChoices(choices,currentNodeId){
@@ -169,50 +178,89 @@ function pathForChoices(choices,currentNodeId){
   for(const entry of choices){if(!entry||entry.node_id!==path.at(-1))return null;const choice=story.nodes[path.at(-1)].choices.find(choice=>choice.id===entry.choice_id&&choice.targetNodeId===entry.target_node_id);if(!choice)return null;path.push(choice.targetNodeId);}
   return path.at(-1)===currentNodeId?path:null;
 }
-function timestamp(value){const time=typeof value==='string'?Date.parse(value):NaN;return Number.isFinite(time)?time:-Infinity;}
-function savedForThisProfile(saved){return saved&&saved.storyId===story.storyId&&saved.version===story.version&&(!saved.profileId||saved.profileId===config.profileId)&&validPath(saved.path);}
-function restoreProgress(){try{const saved=JSON.parse(localStorage.getItem('able-flow-progress'));if(!savedForThisProfile(saved))return;
-  historyPath=saved.path;const restored=pathForChoices(saved.choicesMade,historyPath.at(-1));choicesMade=restored?.length===historyPath.length&&restored.every((id,i)=>id===historyPath[i])?saved.choicesMade:choicesForPath(historyPath);progressUpdatedAt=Number.isFinite(timestamp(saved.updatedAt))?saved.updatedAt:null;
+function savedForThisProfile(saved){return saved&&saved.storyId===story.storyId&&saved.version===story.version&&(saved.profileId??null)===config.profileId&&(!saved.profileScope||saved.profileScope===profileScope)&&validPath(saved.path);}
+function validRemote(row){return row&&row.profile_id===config.profileId&&row.story_id===story.storyId&&row.story_version===story.version&&Number.isSafeInteger(row.revision)&&row.revision>0&&pathForChoices(row.choices_made,row.current_node_id);}
+function restoreProgress(){try{
+  let saved=JSON.parse(localStorage.getItem(progressKey));
+  // Migrate only a legacy record whose explicit owner matches this scope.
+  if(!saved){const legacy=JSON.parse(localStorage.getItem('able-flow-progress'));if(savedForThisProfile(legacy)&&(!config.profileId?profileScope==='local:default':true))saved=legacy;}
+  if(!savedForThisProfile(saved))return;
+  historyPath=saved.path;const restored=pathForChoices(saved.choicesMade,historyPath.at(-1));
+  choicesMade=restored?.length===historyPath.length&&restored.every((id,i)=>id===historyPath[i])?saved.choicesMade:choicesForPath(historyPath);
+  progressUpdatedAt=saved.updatedAt||null;
+  if(saved.sync&&Number.isSafeInteger(saved.sync.revision)&&saved.sync.revision>=0&&Number.isSafeInteger(saved.sync.sequence)&&saved.sync.sequence>=0){
+    syncState={...syncState,...saved.sync};
+    if(syncState.inFlight&&!pathForChoices(syncState.inFlight.choicesMade,syncState.inFlight.path?.at(-1)))syncState.inFlight=null;
+    if(syncState.conflict?.progress&&!validRemote(syncState.conflict.progress))syncState.conflict={progress:null};
+  }else syncState.pending=true; // Legacy work has no acknowledged server revision.
+  persistProgress();showConflict();
 }catch(error){console.info('Starting a fresh story.',error);}}
-function progressSnapshot(){return {storyId:story.storyId,version:story.version,profileId:config.profileId,path:[...historyPath],choicesMade:choicesMade.map(choice=>({...choice})),updatedAt:progressUpdatedAt};}
-function writeLocalProgress(snapshot){try{localStorage.setItem('able-flow-progress',JSON.stringify(snapshot));}catch(error){console.info('Progress remains in memory.',error);}}
+function progressSnapshot(){return {storyId:story.storyId,version:story.version,profileId:config.profileId,profileScope,path:[...historyPath],choicesMade:choicesMade.map(choice=>({...choice})),updatedAt:progressUpdatedAt,sync:JSON.parse(JSON.stringify(syncState))};}
+function persistProgress(){try{localStorage.setItem(progressKey,JSON.stringify(progressSnapshot()));}catch(error){console.info('Progress remains in memory.',error);}}
+function showConflict(){const visible=!!syncState.conflict;$('sync-conflict').hidden=!visible;$('use-cloud').disabled=!validRemote(syncState.conflict?.progress);}
 function saveProgress(){
-  progressUpdatedAt=new Date(Math.max(Date.now(),timestamp(progressUpdatedAt)+1)).toISOString();
-  const snapshot=progressSnapshot();
-  writeLocalProgress(snapshot); // Synchronous and always before attempting sync.
-  void syncProgress(snapshot);
+  progressUpdatedAt=new Date().toISOString(); // Display/audit only; never orders cloud saves.
+  syncState.sequence++;syncState.pending=true;persistProgress();
+  if(!syncReady&&!refreshRunning)void loadRemoteProgress();else void syncProgress();
 }
+function markConflict(row){syncState.inFlight=null;syncState.conflict={progress:row};syncState.pending=true;persistProgress();showConflict();}
 // SYNC: best-effort, never blocking
-async function syncProgress(snapshot){
+async function syncProgress(){
+  if(syncRunning||!syncReady||syncState.conflict||!navigator.onLine||!config.supabaseClient||!config.profileId)return;
+  syncRunning=true;
   try{
-    if(!navigator.onLine||!config.supabaseClient||!config.profileId)return;
-    const {error}=await config.supabaseClient.from('story_progress').upsert({profile_id:config.profileId,story_id:snapshot.storyId,current_node_id:snapshot.path.at(-1),choices_made:snapshot.choicesMade},{onConflict:'profile_id,story_id'});
-    if(error)throw error;
-  }catch(error){console.info('Progress sync skipped; local play continues.',error);}
+    while(navigator.onLine&&syncState.pending&&!syncState.conflict){
+      // Persist the attempted mutation before sending. If its acknowledgement is
+      // lost, retry this exact mutation before sending the latest pending state.
+      if(!syncState.inFlight){syncState.inFlight={path:[...historyPath],choicesMade:choicesMade.map(choice=>({...choice})),sequence:syncState.sequence,expectedRevision:syncState.revision,mutationId:crypto.randomUUID()};persistProgress();}
+      const sent=syncState.inFlight;
+      const {data,error}=await config.supabaseClient.rpc('save_story_progress',{p_story_id:story.storyId,p_story_version:story.version,p_current_node_id:sent.path.at(-1),p_choices_made:sent.choicesMade,p_expected_revision:sent.expectedRevision,p_mutation_id:sent.mutationId});
+      if(error)throw error;
+      if(data?.status==='conflict'){
+        if(data.progress!==null&&!validRemote(data.progress))throw new Error('Invalid conflict response');
+        markConflict(data.progress);break;
+      }
+      if(data?.status!=='saved'||!validRemote(data.progress)||data.progress.last_mutation_id!==sent.mutationId)throw new Error('Invalid save acknowledgement');
+      syncState.revision=data.progress.revision;syncState.inFlight=null;
+      syncState.pending=syncState.sequence!==sent.sequence;persistProgress();
+    }
+  }catch(error){console.info('Progress sync pending; local play continues.',error);}
+  finally{syncRunning=false;}
+}
+function applyRemoteProgress(row){
+  const previousState=scanner.state,previousFocus=document.activeElement?.id;
+  stopTimer();setState('RENDERING');focusCurrent($('scan'));
+  historyPath=pathForChoices(row.choices_made,row.current_node_id);choicesMade=row.choices_made.map(choice=>({...choice}));progressUpdatedAt=row.updated_at;
+  syncState={revision:row.revision,sequence:syncState.sequence,pending:false,inFlight:null,conflict:null};persistProgress();showConflict();renderNode();
+  if(previousState==='SCANNING')startScan();else{setState(previousState);const previous=$(previousFocus);focusCurrent(previous?.matches('button:not(:disabled)')&&!previous.hidden&&!previous.closest('[hidden]')?previous:$('scan'));}
 }
 // SYNC: best-effort, never blocking
 async function loadRemoteProgress(){
+  if(refreshRunning||syncRunning)return;
+  if(!navigator.onLine||!config.supabaseClient||!config.profileId)return;
+  refreshRunning=true;syncReady=false;
   try{
-    if(!navigator.onLine||!config.supabaseClient||!config.profileId)return;
-    const {data,error}=await config.supabaseClient.from('story_progress').select('profile_id,story_id,current_node_id,choices_made,updated_at').eq('profile_id',config.profileId).eq('story_id',story.storyId).order('updated_at',{ascending:false}).limit(1).maybeSingle();
-    if(error)throw error;
-    if(!data||data.profile_id!==config.profileId||data.story_id!==story.storyId||!Number.isFinite(timestamp(data.updated_at)))return;
-    const path=pathForChoices(data.choices_made,data.current_node_id);if(!path)return;
-    // Re-read after the request: a choice made while fetching may be newer.
-    let localTime=timestamp(progressUpdatedAt);
-    try{const saved=JSON.parse(localStorage.getItem('able-flow-progress'));if(savedForThisProfile(saved))localTime=Math.max(localTime,timestamp(saved.updatedAt));}catch(error){console.info('Comparing in-memory progress.',error);}
-    if(timestamp(data.updated_at)<=localTime)return;
-    const previousState=scanner.state,previousFocus=document.activeElement?.id;
-    stopTimer();setState('RENDERING');focusCurrent($('scan'));
-    historyPath=path;choicesMade=data.choices_made.map(choice=>({...choice}));progressUpdatedAt=data.updated_at;
-    writeLocalProgress(progressSnapshot());renderNode();
-    if(previousState==='SCANNING')startScan();else{setState(previousState);const previous=$(previousFocus);focusCurrent(previous?.matches('button:not(:disabled)')&&!previous.hidden?previous:$('scan'));}
+    // An ambiguous previous attempt must be acknowledged idempotently before a read.
+    if(!syncState.inFlight){
+      const {data,error}=await config.supabaseClient.from('story_progress').select('profile_id,story_id,story_version,current_node_id,choices_made,updated_at,revision,last_mutation_id').eq('profile_id',config.profileId).eq('story_id',story.storyId).eq('story_version',story.version).maybeSingle();
+      if(error)throw error;
+      if(data&&!validRemote(data))throw new Error('Incompatible remote progress');
+      if(syncState.pending){if((data?.revision||0)!==syncState.revision)markConflict(data);}
+      else if(data&&data.revision>syncState.revision)applyRemoteProgress(data);
+      else if(!data&&syncState.revision>0)markConflict(null);
+    }
+    syncReady=true;
   }catch(error){console.info('Remote progress unavailable; local play continues.',error);}
+  finally{refreshRunning=false;}
+  if(syncReady)void syncProgress();
 }
+$('keep-local').addEventListener('click',()=>{if(!syncState.conflict)return;syncState.revision=syncState.conflict.progress?.revision||0;syncState.conflict=null;syncState.inFlight=null;syncState.pending=true;persistProgress();showConflict();pauseScan();void syncProgress();});
+$('use-cloud').addEventListener('click',()=>{const row=syncState.conflict?.progress;if(!validRemote(row))return;try{localStorage.setItem(progressKey+':conflict-backup',JSON.stringify(progressSnapshot()));}catch(error){console.info('Cannot preserve local conflict; keeping device progress.',error);return;}applyRemoteProgress(row);});
+window.addEventListener('online',()=>{void loadRemoteProgress();});
 function renderNode(){
   const node=story.nodes[historyPath.at(-1)];$('node-title').textContent=node.title;$('node-text').textContent=node.text;
   $('progress').textContent=node.ending?'Story complete':story.title;$('choices').replaceChildren();
-  $('node-icon').replaceChildren(renderIcon(node.aacIconRef));$('node-gloss').hidden=!node.sslGloss;$('node-gloss').textContent=node.sslGloss?`Draft SSL gloss (language not specified; not a verified translation): ${node.sslGloss}`:'';
+  $('node-icon').replaceChildren(renderIcon(node.aacIconRef));$('node-gloss').hidden=!settings.showGloss||!node.sslGloss;$('node-gloss').textContent=settings.showGloss&&node.sslGloss?`Draft SSL gloss (language not specified; not a verified translation): ${node.sslGloss}`:'';
   for(const choice of node.choices){const button=document.createElement('button');button.id=`choice-${choice.id}`;button.dataset.scan='';button.className='choice';addChoiceContent(button,choice);button.addEventListener('click',()=>moveTo(choice.targetNodeId,choice.id));$('choices').append(button);}
   $('back').disabled=historyPath.length<2;$('restart').disabled=historyPath.length===1;
   $('announcement').textContent=`${node.title}. ${node.text}${node.ending?' Choose Start again to replay.':''}`;

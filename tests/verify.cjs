@@ -50,7 +50,7 @@ for (const url of ['file:///able-flow/index.html', 'http://localhost:8787/sub/in
   check('A: Space starts scanning, wraps through every enabled control, and pauses', () => {
     app.press(); assert.equal(app.d.body.dataset.scanState, 'SCANNING');
     const seen = new Set();
-    const enabled = [...app.d.querySelectorAll('[data-scan]')].filter(el => !el.disabled && !el.hidden);
+    const enabled = [...app.d.querySelectorAll('[data-scan]')].filter(el => !el.disabled && !el.hidden && !el.closest("[hidden]"));
     for (let i = 0; i < enabled.length; i++) { seen.add(app.d.activeElement.id); app.tick(); }
     assert.equal(seen.size, enabled.length);
     app.choose('scan'); assert.equal(app.d.body.dataset.scanState, 'PAUSED'); assert.equal(app.timers.size, 0);
@@ -134,6 +134,19 @@ if (milestone >= 'B') {
   });
 }
 if (milestone >= 'C') {
+  check('C: scannable profile-scoped preferences hide draft gloss by default and persist symbol/gloss choices', () => {
+    const app=boot('http://localhost:8787/sub/index.html');
+    assert.equal(app.d.querySelectorAll('#choices .gloss').length,0);
+    assert.equal(app.d.getElementById('node-gloss').textContent,'');
+    app.press();app.choose('symbols');
+    assert.ok(app.d.body.classList.contains('hide-symbols'));
+    assert.equal(app.d.getElementById('choice-water').getAttribute('aria-label'),'Listen to the water');
+    app.choose('gloss');assert.equal(app.d.getElementById('node-gloss').hidden,false);
+    assert.equal(app.d.querySelectorAll('#choices .gloss').length,2);
+    const key=app.w.eval('settingsKey'),saved=app.w.localStorage.getItem(key);app.dom.window.close();
+    const reload=boot('http://localhost:8787/sub/index.html',{[key]:saved});
+    assert.ok(reload.d.body.classList.contains('hide-symbols'));assert.equal(reload.d.getElementById('node-gloss').hidden,false);reload.dom.window.close();
+  });
   check('C: node and choice AAC slots render local inline SVG with accessible text', () => {
     const app = boot();
     assert.equal(app.d.querySelectorAll('#node-icon svg, #choices svg').length, 3);
@@ -143,7 +156,10 @@ if (milestone >= 'C') {
       assert.equal(svg.querySelectorAll('image,use').length, 0); assert.equal(svg.getAttribute('stroke'), 'currentColor');
     }
     assert.equal(app.d.getElementById('choice-water').getAttribute('aria-label'), 'Listen to the water');
-    assert.equal(app.d.getElementById('choice-water').getAttribute('aria-describedby'), 'gloss-water');
+    assert.equal(app.d.getElementById('choice-water').getAttribute('aria-describedby'), null);
+    assert.equal(app.d.getElementById('node-gloss').hidden,true);
+    app.d.getElementById('gloss').click();
+    assert.equal(app.d.getElementById('choice-water').getAttribute('aria-describedby'),'gloss-water');
     assert.equal(app.d.getElementById('node-gloss').hidden, false);
     assert.match(app.d.getElementById('node-gloss').textContent, /not a verified translation/);
     app.press(); app.choose('choice-shade'); assert.equal(app.d.querySelectorAll('#node-icon svg').length, 1);
@@ -160,7 +176,7 @@ if (milestone >= 'C') {
 }
 check('Scan: interval attribute controls one timer; every tick keeps focus/current/outline aligned', () => {
   const app = boot(); app.d.body.dataset.scanInterval = '3500'; app.press();
-  const ordered = [...app.d.querySelectorAll('[data-scan]')].filter(el => !el.disabled && !el.hidden);
+  const ordered = [...app.d.querySelectorAll('[data-scan]')].filter(el => !el.disabled && !el.hidden && !el.closest("[hidden]"));
   for (let i = 0; i < ordered.length * 3; i++) {
     assert.equal(app.timers.size, 1); assert.equal([...app.timers.values()][0].ms, 3500);
     assert.equal(app.w.eval('scanIndex'), i % ordered.length);
@@ -227,7 +243,7 @@ async function finish() {
       assert.equal(app.d.getElementById('update').hidden, false);
       app.press(); app.choose('update');
       assert.equal(messages[0].type, 'ACTIVATE_UPDATE');
-      assert.ok(app.w.localStorage.getItem('able-flow-progress')); assert.equal(app.d.body.dataset.scanState, 'PAUSED');
+      assert.ok(app.w.localStorage.getItem(app.w.eval('progressKey'))); assert.equal(app.d.body.dataset.scanState, 'PAUSED');
       assert.equal(typeof listeners.controllerchange, 'function'); assert.deepEqual(app.errors, []);
     });
     check('D: install prompt becomes scan-reachable when supported', () => {

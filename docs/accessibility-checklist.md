@@ -49,6 +49,9 @@ capability, and arrange verification on an appropriate supported deployment devi
 
 ## 3. High contrast / forced colors
 
+- [ ] At 200% zoom and a narrow target viewport, story text and every control
+      reflow without clipping or requiring horizontal scrolling to read content.
+
 - [ ] Enable the browser's forced-colors mode or the platform high-contrast mode
       that activates it. The app's own High contrast toggle alone does not count.
 - [ ] Scan through every enabled control on every branch and ending, including
