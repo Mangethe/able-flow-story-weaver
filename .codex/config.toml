@@ -1,0 +1,12 @@
+[project]
+name = "able-flow-story-weaver"
+version = "1.0.0"
+
+[mcp_servers.supabase]
+url = "https://mcp.supabase.com/mcp"
+# Optional: scope to a single project for safety
+# url = "https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT_REF"
+
+[mcp_servers.github]
+url = "https://api.githubcopilot.com/mcp/"
+bearer_token_env_var = "GITHUB_PAT_TOKEN"
