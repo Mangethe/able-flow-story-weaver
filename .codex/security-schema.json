@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Security review findings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findings"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "description": "Actionable security vulnerabilities introduced by the reviewed changes. Empty when none are found.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "file", "line", "description"],
+        "properties": {
+          "severity": {"type": "string", "enum": ["critical", "high", "medium", "low"]},
+          "file": {"type": "string", "minLength": 1, "description": "Repository-relative path to the affected file."},
+          "line": {"type": "integer", "minimum": 1, "description": "One-based line number in the affected file."},
+          "description": {"type": "string", "minLength": 1, "description": "The vulnerability, its exploit conditions and security impact."}
+        }
+      }
+    }
+  }
+}

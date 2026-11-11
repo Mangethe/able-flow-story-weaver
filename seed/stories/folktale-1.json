@@ -1,0 +1,51 @@
+{
+  "storyId": "folktale-1",
+  "version": 1,
+  "title": "Tortoise and the quiet garden",
+  "signLanguage": null,
+  "startNodeId": "garden",
+  "nodes": {
+    "garden": {
+      "id": "garden",
+      "title": "A place to pause",
+      "text": "One dry morning, Tortoise reached a quiet garden. Water whispered beyond the reeds, and a broad tree offered shade. Tortoise had promised to bring the village a lesson in patience. Where should Tortoise begin?",
+      "aacIconRef": "garden",
+      "sslGloss": "TORTOISE GARDEN ARRIVE. WATER NEAR. TREE SHADE. CHOOSE.",
+      "ending": false,
+      "choices": [
+        {
+          "id": "water",
+          "text": "Listen to the water",
+          "aacIconRef": "water",
+          "sslGloss": "WATER LISTEN",
+          "targetNodeId": "pond"
+        },
+        {
+          "id": "shade",
+          "text": "Rest beneath the tree",
+          "aacIconRef": "tree",
+          "sslGloss": "TREE UNDER REST",
+          "targetNodeId": "tree"
+        }
+      ]
+    },
+    "pond": {
+      "id": "pond",
+      "title": "By the water",
+      "text": "Tortoise sat beside the pond. A small bird rushed past three times before noticing the water. Tortoise waited, listened, and showed the bird a safe place to drink. They returned to the village together. The lesson: patience can make room for kindness. Your story is complete.",
+      "aacIconRef": "water",
+      "sslGloss": "TORTOISE POND SIT. BIRD WATER FIND. WAIT. HELP. KINDNESS. STORY FINISH.",
+      "ending": true,
+      "choices": []
+    },
+    "tree": {
+      "id": "tree",
+      "title": "Under the tree",
+      "text": "Tortoise rested beneath the tree. Soon a tired hare arrived. Tortoise moved a little, making space in the shade. The hare stayed to listen instead of racing away. They returned to the village together. The lesson: a small kindness can help everyone slow down. Your story is complete.",
+      "aacIconRef": "tree",
+      "sslGloss": "TREE SHADE REST. TORTOISE SHARE. HARE REST. KINDNESS. STORY FINISH.",
+      "ending": true,
+      "choices": []
+    }
+  }
+}

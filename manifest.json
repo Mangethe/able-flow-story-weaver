@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "ABLE-FLOW Story Weaver",
+  "short_name": "ABLE-FLOW",
+  "description": "An offline branching story with single-switch scanning, AAC symbols and draft SSL gloss.",
+  "lang": "en",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f2e9",
+  "theme_color": "#123c35",
+  "icons": [
+    {"src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

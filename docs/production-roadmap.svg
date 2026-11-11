@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
+  <title id="title">ABLE-FLOW production path</title>
+  <desc id="description">Four stages: single-file PWA, static hosting on the school server, optional Supabase sync, and a planned multi-school content pack. Each stage has a readiness gate. Every release requires Spacebar navigation, offline cold start, forced-colors focus and NVDA or TalkBack announcements.</desc>
+  <rect width="1600" height="900" fill="#f4f2e9"/>
+  <g font-family="Arial, sans-serif" fill="#152f29">
+    <text x="80" y="112" font-size="56" font-weight="700" fill="#123c35">ABLE-FLOW production path</text>
+    <text x="80" y="173" font-size="28">Keep classroom storytelling available without a network at every stage</text>
+    <path d="M80 222H1520" stroke="#65776f" stroke-width="2"/>
+
+    <g transform="translate(80 0)">
+      <text x="0" y="310" font-size="42" font-weight="700" fill="#123c35">01</text>
+      <text x="0" y="374" font-size="31" font-weight="700">Single-file PWA</text>
+      <text x="0" y="450" font-size="22" fill="#435c54">Implemented</text>
+      <text x="0" y="481" font-size="22" fill="#435c54">Target-device QA pending</text>
+      <text x="0" y="545" font-size="25"><tspan x="0">Embedded story + SVG</tspan><tspan x="0" dy="39">Local save; switch scanning</tspan></text>
+      <text x="0" y="675" font-size="23" font-weight="700">Advance when</text>
+      <text x="0" y="713" font-size="23">Device checklist passes</text>
+    </g>
+    <text x="407" y="375" font-size="38" fill="#123c35">→</text>
+
+    <g transform="translate(450 0)">
+      <text x="0" y="310" font-size="42" font-weight="700" fill="#123c35">02</text>
+      <text x="0" y="374" font-size="31" font-weight="700">School server</text>
+      <text x="0" y="450" font-size="22" fill="#435c54">Next deployment</text>
+      <text x="0" y="545" font-size="25"><tspan x="0">Static nginx + trusted HTTPS</tspan><tspan x="0" dy="39">Versioned release + rollback</tspan></text>
+      <text x="0" y="675" font-size="23" font-weight="700">Advance when</text>
+      <text x="0" y="713" font-size="23"><tspan x="0">Installed offline cold start</tspan><tspan x="0" dy="33">restores the last branch</tspan></text>
+    </g>
+    <text x="777" y="375" font-size="38" fill="#123c35">→</text>
+
+    <g transform="translate(820 0)">
+      <text x="0" y="310" font-size="42" font-weight="700" fill="#123c35">03</text>
+      <text x="0" y="374" font-size="31" font-weight="700"><tspan x="0">Optional</tspan><tspan x="0" dy="39">Supabase sync</tspan></text>
+      <text x="0" y="450" font-size="22" fill="#435c54">Adapter + schema implemented</text>
+      <text x="0" y="481" font-size="22" fill="#435c54">Client provisioning remains</text>
+      <text x="0" y="545" font-size="25"><tspan x="0">Anonymous auth + owner RLS</tspan><tspan x="0" dy="39">Local-first background sync</tspan></text>
+      <text x="0" y="675" font-size="23" font-weight="700">Advance when</text>
+      <text x="0" y="713" font-size="23"><tspan x="0">Real sessions and two-profile</tspan><tspan x="0" dy="33">isolation are verified</tspan></text>
+    </g>
+    <text x="1147" y="375" font-size="38" fill="#123c35">→</text>
+
+    <g transform="translate(1190 0)">
+      <text x="0" y="310" font-size="42" font-weight="700" fill="#123c35">04</text>
+      <text x="0" y="374" font-size="31" font-weight="700"><tspan x="0">Multi-school</tspan><tspan x="0" dy="39">content pack</tspan></text>
+      <text x="0" y="450" font-size="22" fill="#435c54">Planned</text>
+      <text x="0" y="545" font-size="25"><tspan x="0">Versioned stories + languages</tspan><tspan x="0" dy="39">School-specific offline packs</tspan></text>
+      <text x="0" y="675" font-size="23" font-weight="700">Advance when</text>
+      <text x="0" y="713" font-size="23"><tspan x="0">Licensing, language review</tspan><tspan x="0" dy="33">and pack validation pass</tspan></text>
+    </g>
+    <rect x="0" y="801" width="1600" height="99" fill="#123c35"/>
+    <text x="80" y="843" font-size="25" fill="#fff" font-weight="700">Every release: Spacebar navigation · offline cold start · forced-colors focus · NVDA / TalkBack</text>
+    <text x="80" y="879" font-size="20" fill="#fff">Same target-device checklist for developers, school operators and judges</text>
+  </g>
+</svg>

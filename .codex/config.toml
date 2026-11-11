@@ -4,10 +4,15 @@ version = "1.0.0"
 
 [mcp_servers.supabase]
 url = "https://mcp.supabase.com/mcp"
+
+[mcp_servers.supabase.tools.execute_sql]
+approval_mode = "approve"
+
+[mcp_servers.supabase.tools.apply_migration]
+approval_mode = "approve"
 # Optional: scope to a single project for safety
 # url = "https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT_REF"
 
 [mcp_servers.github]
 url = "https://api.githubcopilot.com/mcp/"
 bearer_token_env_var = "GITHUB_PAT_TOKEN"
-#env_http_headers = { Authorization = "GITHUB_PAT_BEARER" }

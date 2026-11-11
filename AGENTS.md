@@ -6,6 +6,7 @@
 3. **Single-File Architecture:** All CSS and JavaScript must be inlined in `index.html`. Do not introduce a build step, bundler, or external `<script src>` unless explicitly instructed.
 
 ## Done When (verification checklist)
+- [ ] Complete and record the [manual accessibility checklist](docs/accessibility-checklist.md) for every change and before every release on the target device (a low-end Android tablet or the school server's browser). Do not substitute automated tests or desktop simulations; failed or unverified required checks block release.
 - [ ] The story can be navigated start-to-finish using only Spacebar (scan → select).
 - [ ] The app loads and runs with DevTools “Offline” checked.
 - [ ] High-contrast mode passes WCAG 2.2 AA contrast ratios (4.5:1 body text).

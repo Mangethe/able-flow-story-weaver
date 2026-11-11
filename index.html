@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#123c35">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon-192.png" type="image/png">
+<title>ABLE-FLOW · Your story, your choice</title>
+<style>
+:root{color-scheme:light;--bg:#f4f2e9;--panel:#fff;--text:#152f29;--muted:#435c54;--accent:#123c35;--on-accent:#fff;--line:#65776f;--focus:#a53b00}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:1.1rem/1.6 system-ui,sans-serif}body.contrast{color-scheme:dark;--bg:#000;--panel:#000;--text:#fff;--muted:#fff;--accent:#fff;--on-accent:#000;--line:#fff;--focus:#ffdf00}
+header,main,footer{width:min(54rem,100%);margin:auto;padding:1.25rem}header{border-bottom:1px solid var(--line)}.eyebrow{font-size:.8rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(2rem,6vw,3.3rem);line-height:1.15;margin:.5rem 0}h2{line-height:1.25}p{max-width:65ch}.muted{color:var(--muted)}article,.settings{padding:clamp(1rem,4vw,2rem);background:var(--panel);border:1px solid var(--line);border-radius:1rem;margin:1.25rem 0}button{font:inherit;text-align:left;cursor:pointer;min-height:3.5rem;padding:.8rem 1rem;color:var(--text);background:var(--panel);border:2px solid var(--line);border-radius:.65rem}button:hover{border-color:var(--text)}button:disabled{opacity:.55;cursor:default}button.primary{background:var(--accent);color:var(--on-accent)}button:focus-visible,.scan-focus{outline:4px solid var(--focus);outline-offset:4px}.controls{display:flex;flex-wrap:wrap;gap:1rem}.controls button{flex:1 1 12rem}.choices{display:grid;gap:1rem;margin:1.5rem 0}button[hidden],[hidden]{display:none!important}.badge{font-size:.85rem;border:1px solid var(--line);padding:.25rem .6rem;border-radius:2rem;display:inline-block}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}footer{font-size:.9rem}svg.icon{width:3rem;height:3rem;flex-shrink:0}.choice{display:flex;align-items:center;gap:1rem}.gloss{display:block;font-size:.9rem;color:var(--muted);margin-top:.4rem}#node-icon svg{width:5rem;height:5rem}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}@media(forced-colors:active){.scan-focus{outline-color:Highlight}}
+</style>
+</head>
+<body data-scan-interval="2000">
+<header><div class="eyebrow">ABLE-FLOW</div><h1>Your story, your choice.</h1><p class="muted">Take your time. Every choice is yours.</p><span class="badge" id="connection">Works offline</span></header>
+<main id="main">
+<h2 class="sr-only">Story and controls</h2>
+<p id="instructions">Press Space or Enter to start scanning. The highlight moves automatically. Press again to choose. Tab pauses scanning for ordinary keyboard navigation.</p>
+<p id="scan-status" role="status" aria-live="polite">Ready to scan.</p>
+<article id="story" aria-labelledby="node-title"><div id="node-icon"></div><p class="eyebrow" id="progress">Story space</p><h2 id="node-title">Ready when you are</h2><p id="node-text">Story content will appear here.</p><p id="node-gloss" class="gloss" hidden></p><div id="choices" class="choices"></div></article>
+<div class="controls"><button id="back" data-scan disabled>Go back</button><button id="restart" data-scan disabled>Start again</button></div>
+<div class="controls"><button id="scan" class="primary" data-scan>Start scanning</button></div>
+<section class="settings" aria-labelledby="settings-title"><h2 id="settings-title">Make yourself comfortable</h2><div class="controls"><button id="speed" data-scan>Scan speed: 2 seconds</button><button id="contrast" data-scan aria-pressed="false">High contrast</button></div></section>
+<p id="announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+</main>
+<footer>Space / Enter to select · Tab to explore · Your progress stays on this device.<p id="install-status">Direct-file mode works without installation.</p><div class="controls"><button id="install" data-scan hidden>Install ABLE-FLOW</button><button id="update" data-scan hidden>Save progress and update</button></div></footer>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+// Optional preconfigured, authenticated client. No keys, SDK downloads or auth
+// requests are needed for local play. Supply this object before this script.
+const config={supabaseClient:null,profileId:null,...window.ABLE_FLOW_CONFIG};
+const settings={contrast:false};
+const scanner={state:'READY',timer:null,held:false,targets:[]};
+let scanIndex=0;
+function scanInterval(){const value=Number(document.body.dataset.scanInterval);return Number.isInteger(value)&&value>0&&value<=2147483647?value:2000;}
+function stopTimer(){clearInterval(scanner.timer);scanner.timer=null;}
+function clearHighlight(){document.querySelectorAll('.scan-focus,[aria-current]').forEach(el=>{el.classList.remove('scan-focus');el.removeAttribute('aria-current');});}
+function setState(state){scanner.state=state;document.body.dataset.scanState=state;}
+function targets(){return [...document.querySelectorAll('[data-scan]')].filter(el=>!el.disabled&&!el.hidden&&!el.closest('[hidden]'));}
+function focusCurrent(el){clearHighlight();el.setAttribute('aria-current','true');el.classList.add('scan-focus');el.focus({preventScroll:true});el.scrollIntoView({block:'nearest'});}
+function highlightCurrent(){const el=scanner.targets[scanIndex];if(el)focusCurrent(el);}
+function startScan(){
+  stopTimer();scanner.targets=targets();scanIndex=0;
+  if(!scanner.targets.length){pauseScan();return;}
+  setState('SCANNING');$('scan').textContent='Pause scanning';$('scan-status').textContent='Scanning. Press Space or Enter to choose.';highlightCurrent();
+  const interval=setInterval(()=>{
+    // A cleared interval must never advance a replacement loop. Held switches
+    // freeze the new branch at index zero until release.
+    if(scanner.timer!==interval||scanner.state!=='SCANNING'||scanner.held)return;
+    const available=targets();
+    if(available.length!==scanner.targets.length||available.some((el,i)=>el!==scanner.targets[i])){startScan();return;}
+    scanIndex=(scanIndex+1)%scanner.targets.length;highlightCurrent();
+  },scanInterval());
+  scanner.timer=interval;
+}
+function pauseScan(state='PAUSED',focus=true){stopTimer();clearHighlight();setState(state);$('scan').textContent='Resume scanning';$('scan-status').textContent=state==='SUSPENDED'?'Scanning stopped while this page was hidden. Resume when ready.':'Scanning paused.';if(focus)focusCurrent($('scan'));}
+function selectCurrent(){
+  if(scanner.state==='SCANNING'){
+    const el=scanner.targets[scanIndex];stopTimer();
+    if(!el||!targets().includes(el)){startScan();return;}
+    setState('ACTIVATING');
+    try{el.click();}finally{if(scanner.state==='ACTIVATING')startScan();}
+  }else if(scanner.state!=='ACTIVATING'&&scanner.state!=='RENDERING'){
+    const el=document.activeElement;
+    if(el?.matches('button:not(:disabled)')&&!el.hidden)el.click();else startScan();
+  }
+}
+// Pointer and native assistive-technology clicks interrupt the same interval
+// before any action handler runs, just as selectCurrent does for switch input.
+document.addEventListener('click',event=>{if(event.target.closest('button[data-scan]')&&scanner.state==='SCANNING'){stopTimer();setState('ACTIVATING');}},true);
+document.addEventListener('click',()=>{if(scanner.state==='ACTIVATING')startScan();});
+$('scan').addEventListener('click',()=>scanner.state==='SCANNING'||scanner.state==='ACTIVATING'?pauseScan():startScan());
+$('speed').addEventListener('click',()=>{const speeds=[1000,2000,3000,5000];document.body.dataset.scanInterval=String(speeds[(speeds.indexOf(scanInterval())+1)%speeds.length]);applySettings();saveSettings();});
+$('contrast').addEventListener('click',()=>{settings.contrast=!settings.contrast;applySettings();saveSettings();});
+function applySettings(){document.body.classList.toggle('contrast',settings.contrast);$('contrast').setAttribute('aria-pressed',String(settings.contrast));$('speed').textContent=`Scan speed: ${scanInterval()/1000} seconds`;}
+function saveSettings(){try{localStorage.setItem('able-flow-settings',JSON.stringify({...settings,speed:scanInterval()}));}catch(error){console.info('Settings remain in memory.',error);}}
+try{const saved=JSON.parse(localStorage.getItem('able-flow-settings'));if(saved){if([1000,2000,3000,5000].includes(saved.speed))document.body.dataset.scanInterval=String(saved.speed);settings.contrast=saved.contrast===true;}}catch(error){console.info('Using default settings.',error);}applySettings();
+document.addEventListener('keydown',event=>{if(event.key==='Tab'){pauseScan('PAUSED',false);return;}if(event.key!==' '&&event.key!=='Enter')return;event.preventDefault();if(event.repeat||scanner.held)return;scanner.held=true;selectCurrent();});
+document.addEventListener('keyup',event=>{if(event.key===' '||event.key==='Enter')scanner.held=false;});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){scanner.held=false;pauseScan('SUSPENDED');}});
+window.addEventListener('blur',()=>{scanner.held=false;if(scanner.state==='SCANNING')pauseScan('SUSPENDED');});
+// Small original line symbols. SVG elements are created locally, never fetched.
+const iconLibrary={
+  garden:['M32 54V27','M32 40C12 40 10 23 11 15C29 14 35 24 32 40Z','M32 33C32 13 45 9 55 10C55 26 46 35 32 33Z','M13 55H52'],
+  water:['M9 24Q17 16 25 24T41 24T57 24','M9 37Q17 29 25 37T41 37T57 37','M9 50Q17 42 25 50T41 50T57 50','M32 6L27 15H37Z'],
+  tree:['M27 54V39H37V54','M16 39H48Q59 38 52 27Q55 15 43 15Q35 1 25 13Q11 9 11 23Q1 36 16 39Z','M15 55H49'],
+  fallback:['M12 12H52V52H12Z','M25 24Q25 16 33 17Q44 19 35 30L32 33V38','M32 44V46']
+};
+function renderIcon(reference){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('icon');svg.setAttribute('viewBox','0 0 64 64');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','3');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');for(const d of iconLibrary[reference]||iconLibrary.fallback){const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',d);svg.append(path);}return svg;}
+function addChoiceContent(button,choice){button.replaceChildren(renderIcon(choice.aacIconRef));const content=document.createElement('span');const label=document.createElement('span');label.textContent=choice.text;content.append(label);if(choice.sslGloss){const gloss=document.createElement('span');gloss.className='gloss';gloss.id=`gloss-${choice.id}`;gloss.textContent=`Draft SSL gloss: ${choice.sslGloss}`;content.append(gloss);button.setAttribute('aria-describedby',gloss.id);}button.setAttribute('aria-label',choice.text);button.append(content);}
+// All narrative content is embedded: no runtime fetch is needed.
+// Embedded copy of seed/stories/folktale-1.json; keep both in sync.
+const story={
+  "storyId": "folktale-1",
+  "version": 1,
+  "title": "Tortoise and the quiet garden",
+  "signLanguage": null,
+  "startNodeId": "garden",
+  "nodes": {
+    "garden": {
+      "id": "garden",
+      "title": "A place to pause",
+      "text": "One dry morning, Tortoise reached a quiet garden. Water whispered beyond the reeds, and a broad tree offered shade. Tortoise had promised to bring the village a lesson in patience. Where should Tortoise begin?",
+      "aacIconRef": "garden",
+      "sslGloss": "TORTOISE GARDEN ARRIVE. WATER NEAR. TREE SHADE. CHOOSE.",
+      "ending": false,
+      "choices": [
+        {
+          "id": "water",
+          "text": "Listen to the water",
+          "aacIconRef": "water",
+          "sslGloss": "WATER LISTEN",
+          "targetNodeId": "pond"
+        },
+        {
+          "id": "shade",
+          "text": "Rest beneath the tree",
+          "aacIconRef": "tree",
+          "sslGloss": "TREE UNDER REST",
+          "targetNodeId": "tree"
+        }
+      ]
+    },
+    "pond": {
+      "id": "pond",
+      "title": "By the water",
+      "text": "Tortoise sat beside the pond. A small bird rushed past three times before noticing the water. Tortoise waited, listened, and showed the bird a safe place to drink. They returned to the village together. The lesson: patience can make room for kindness. Your story is complete.",
+      "aacIconRef": "water",
+      "sslGloss": "TORTOISE POND SIT. BIRD WATER FIND. WAIT. HELP. KINDNESS. STORY FINISH.",
+      "ending": true,
+      "choices": []
+    },
+    "tree": {
+      "id": "tree",
+      "title": "Under the tree",
+      "text": "Tortoise rested beneath the tree. Soon a tired hare arrived. Tortoise moved a little, making space in the shade. The hare stayed to listen instead of racing away. They returned to the village together. The lesson: a small kindness can help everyone slow down. Your story is complete.",
+      "aacIconRef": "tree",
+      "sslGloss": "TREE SHADE REST. TORTOISE SHARE. HARE REST. KINDNESS. STORY FINISH.",
+      "ending": true,
+      "choices": []
+    }
+  }
+};
+function validateStory(data){
+  const fail=message=>{throw new Error(`Invalid story: ${message}`);};
+  if(!data||typeof data.storyId!=='string'||!Number.isInteger(data.version)||!data.nodes||typeof data.nodes!=='object')fail('missing metadata');
+  const entries=Object.entries(data.nodes);if(!entries.length||!Object.hasOwn(data.nodes,data.startNodeId))fail('missing start node');
+  for(const [id,node] of entries){
+    if(!/^[a-z][a-z0-9-]*$/.test(id)||node.id!==id||typeof node.title!=='string'||typeof node.text!=='string'||!node.text.trim()||!Array.isArray(node.choices)||typeof node.ending!=='boolean')fail(`node ${id}`);
+    if(node.ending!==(node.choices.length===0))fail(`ending ${id}`);
+    const validateAids=value=>{if(value.aacIconRef!=null&&!Object.hasOwn(iconLibrary,value.aacIconRef))fail(`symbol in ${id}`);if(value.sslGloss!=null&&typeof value.sslGloss!=='string')fail(`gloss in ${id}`);};validateAids(node);
+    const ids=new Set();for(const choice of node.choices){if(typeof choice.id!=='string'||!/^[a-z][a-z0-9-]*$/.test(choice.id)||ids.has(choice.id)||typeof choice.text!=='string'||!choice.text.trim()||!Object.hasOwn(data.nodes,choice.targetNodeId))fail(`choice in ${id}`);ids.add(choice.id);validateAids(choice);}
+  }
+  const reached=new Set();function visit(id){if(reached.has(id))return;reached.add(id);data.nodes[id].choices.forEach(choice=>visit(choice.targetNodeId));}visit(data.startNodeId);
+  if(reached.size!==entries.length)fail('unreachable node');
+  const finishable=new Set(entries.filter(([,node])=>node.ending).map(([id])=>id));
+  let changed=true;while(changed){changed=false;for(const [id,node] of entries)if(!finishable.has(id)&&node.choices.some(choice=>finishable.has(choice.targetNodeId))){finishable.add(id);changed=true;}}
+  if(finishable.size!==entries.length)fail('a node has no route to an ending');
+}
+let historyPath=[story.startNodeId],choicesMade=[],progressUpdatedAt=null;
+function validPath(path){return Array.isArray(path)&&path.length>0&&path.length<=1000&&path[0]===story.startNodeId&&path.every((id,i)=>Object.hasOwn(story.nodes,id)&&(i===0||story.nodes[path[i-1]].choices.some(choice=>choice.targetNodeId===id)));}
+function choicesForPath(path){return path.slice(1).map((id,i)=>({node_id:path[i],choice_id:story.nodes[path[i]].choices.find(choice=>choice.targetNodeId===id).id,target_node_id:id}));}
+function pathForChoices(choices,currentNodeId){
+  if(!Array.isArray(choices)||choices.length>=1000)return null;
+  const path=[story.startNodeId];
+  for(const entry of choices){if(!entry||entry.node_id!==path.at(-1))return null;const choice=story.nodes[path.at(-1)].choices.find(choice=>choice.id===entry.choice_id&&choice.targetNodeId===entry.target_node_id);if(!choice)return null;path.push(choice.targetNodeId);}
+  return path.at(-1)===currentNodeId?path:null;
+}
+function timestamp(value){const time=typeof value==='string'?Date.parse(value):NaN;return Number.isFinite(time)?time:-Infinity;}
+function savedForThisProfile(saved){return saved&&saved.storyId===story.storyId&&saved.version===story.version&&(!saved.profileId||saved.profileId===config.profileId)&&validPath(saved.path);}
+function restoreProgress(){try{const saved=JSON.parse(localStorage.getItem('able-flow-progress'));if(!savedForThisProfile(saved))return;
+  historyPath=saved.path;const restored=pathForChoices(saved.choicesMade,historyPath.at(-1));choicesMade=restored?.length===historyPath.length&&restored.every((id,i)=>id===historyPath[i])?saved.choicesMade:choicesForPath(historyPath);progressUpdatedAt=Number.isFinite(timestamp(saved.updatedAt))?saved.updatedAt:null;
+}catch(error){console.info('Starting a fresh story.',error);}}
+function progressSnapshot(){return {storyId:story.storyId,version:story.version,profileId:config.profileId,path:[...historyPath],choicesMade:choicesMade.map(choice=>({...choice})),updatedAt:progressUpdatedAt};}
+function writeLocalProgress(snapshot){try{localStorage.setItem('able-flow-progress',JSON.stringify(snapshot));}catch(error){console.info('Progress remains in memory.',error);}}
+function saveProgress(){
+  progressUpdatedAt=new Date(Math.max(Date.now(),timestamp(progressUpdatedAt)+1)).toISOString();
+  const snapshot=progressSnapshot();
+  writeLocalProgress(snapshot); // Synchronous and always before attempting sync.
+  void syncProgress(snapshot);
+}
+// SYNC: best-effort, never blocking
+async function syncProgress(snapshot){
+  try{
+    if(!navigator.onLine||!config.supabaseClient||!config.profileId)return;
+    const {error}=await config.supabaseClient.from('story_progress').upsert({profile_id:config.profileId,story_id:snapshot.storyId,current_node_id:snapshot.path.at(-1),choices_made:snapshot.choicesMade},{onConflict:'profile_id,story_id'});
+    if(error)throw error;
+  }catch(error){console.info('Progress sync skipped; local play continues.',error);}
+}
+// SYNC: best-effort, never blocking
+async function loadRemoteProgress(){
+  try{
+    if(!navigator.onLine||!config.supabaseClient||!config.profileId)return;
+    const {data,error}=await config.supabaseClient.from('story_progress').select('profile_id,story_id,current_node_id,choices_made,updated_at').eq('profile_id',config.profileId).eq('story_id',story.storyId).order('updated_at',{ascending:false}).limit(1).maybeSingle();
+    if(error)throw error;
+    if(!data||data.profile_id!==config.profileId||data.story_id!==story.storyId||!Number.isFinite(timestamp(data.updated_at)))return;
+    const path=pathForChoices(data.choices_made,data.current_node_id);if(!path)return;
+    // Re-read after the request: a choice made while fetching may be newer.
+    let localTime=timestamp(progressUpdatedAt);
+    try{const saved=JSON.parse(localStorage.getItem('able-flow-progress'));if(savedForThisProfile(saved))localTime=Math.max(localTime,timestamp(saved.updatedAt));}catch(error){console.info('Comparing in-memory progress.',error);}
+    if(timestamp(data.updated_at)<=localTime)return;
+    const previousState=scanner.state,previousFocus=document.activeElement?.id;
+    stopTimer();setState('RENDERING');focusCurrent($('scan'));
+    historyPath=path;choicesMade=data.choices_made.map(choice=>({...choice}));progressUpdatedAt=data.updated_at;
+    writeLocalProgress(progressSnapshot());renderNode();
+    if(previousState==='SCANNING')startScan();else{setState(previousState);const previous=$(previousFocus);focusCurrent(previous?.matches('button:not(:disabled)')&&!previous.hidden?previous:$('scan'));}
+  }catch(error){console.info('Remote progress unavailable; local play continues.',error);}
+}
+function renderNode(){
+  const node=story.nodes[historyPath.at(-1)];$('node-title').textContent=node.title;$('node-text').textContent=node.text;
+  $('progress').textContent=node.ending?'Story complete':story.title;$('choices').replaceChildren();
+  $('node-icon').replaceChildren(renderIcon(node.aacIconRef));$('node-gloss').hidden=!node.sslGloss;$('node-gloss').textContent=node.sslGloss?`Draft SSL gloss (language not specified; not a verified translation): ${node.sslGloss}`:'';
+  for(const choice of node.choices){const button=document.createElement('button');button.id=`choice-${choice.id}`;button.dataset.scan='';button.className='choice';addChoiceContent(button,choice);button.addEventListener('click',()=>moveTo(choice.targetNodeId,choice.id));$('choices').append(button);}
+  $('back').disabled=historyPath.length<2;$('restart').disabled=historyPath.length===1;
+  $('announcement').textContent=`${node.title}. ${node.text}${node.ending?' Choose Start again to replay.':''}`;
+}
+function changePath(next,nextChoices=choicesForPath(next)){const scanning=['SCANNING','ACTIVATING'].includes(scanner.state);stopTimer();setState('RENDERING');focusCurrent($('scan'));historyPath=next;choicesMade=nextChoices;saveProgress();renderNode();if(scanning)startScan();else{pauseScan('PAUSED',false);focusCurrent($('choices').querySelector('button')||$('restart'));}}
+function moveTo(id,choiceId){const current=story.nodes[historyPath.at(-1)],choice=current.choices.find(choice=>choice.targetNodeId===id&&(!choiceId||choice.id===choiceId));if(choice)changePath([...historyPath,id],[...choicesMade,{node_id:current.id,choice_id:choice.id,target_node_id:id}]);}
+$('back').addEventListener('click',()=>{if(historyPath.length>1)changePath(historyPath.slice(0,-1),choicesMade.slice(0,-1));});
+$('restart').addEventListener('click',()=>changePath([story.startNodeId]));
+try{validateStory(story);restoreProgress();renderNode();}catch(error){console.error(error);$('node-title').textContent='This story could not be loaded';$('node-text').textContent='Please check the embedded story data.';}
+setState('READY');focusCurrent($('scan'));
+let pendingInstall=null,waitingWorker=null,updateRequested=false;
+window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();pendingInstall=event;$('install').hidden=false;});
+window.addEventListener('appinstalled',()=>{pendingInstall=null;$('install').hidden=true;$('install-status').textContent='ABLE-FLOW is installed and ready for offline use.';pauseScan();});
+$('install').addEventListener('click',async()=>{pauseScan();try{if(!pendingInstall)return;await pendingInstall.prompt();await pendingInstall.userChoice;pendingInstall=null;$('install').hidden=true;$('scan').focus();}catch(error){console.info('Installation remains optional.',error);}});
+function offerUpdate(worker){waitingWorker=worker;$('update').hidden=false;$('install-status').textContent='An update is ready. Your story will stay open until you choose to update.';}
+$('update').addEventListener('click',()=>{pauseScan();saveProgress();saveSettings();try{if(waitingWorker){updateRequested=true;waitingWorker.postMessage({type:'ACTIVATE_UPDATE'});$('install-status').textContent='Applying update. Your progress is saved.';}}catch(error){updateRequested=false;console.info('Update can be retried later.',error);}});
+async function setupOffline(){
+  const supportedOrigin=location.protocol==='https:'||(location.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(location.hostname));
+  if(!supportedOrigin){$('install-status').textContent=location.protocol==='file:'?'Direct-file mode: the story works offline. Use localhost or HTTPS to install.':'The story works here. Use localhost or HTTPS to enable offline installation.';return;}
+  if(!('serviceWorker' in navigator)){$('install-status').textContent='This browser can play the story; offline installation is unavailable.';return;}
+  try{
+    const registration=await navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'});
+    if(registration.waiting)offerUpdate(registration.waiting);
+    registration.addEventListener('updatefound',()=>{const worker=registration.installing;if(!worker)return;worker.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)offerUpdate(worker);});});
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{if(updateRequested)location.reload();});
+    await navigator.serviceWorker.ready;
+    if(!waitingWorker)$('install-status').textContent='Saved for offline use. Install from your browser menu, or use Install when available.';
+  }catch(error){console.info('Offline installation unavailable; story remains usable.',error);$('install-status').textContent='The story is ready. Offline installation can be retried when online.';}
+}
+setupOffline();
+void loadRemoteProgress(); // Startup fetch is never awaited by rendering or scanning.
+</script>
+</body>
+</html>
