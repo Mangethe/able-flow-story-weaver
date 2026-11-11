@@ -1,0 +1,26 @@
+name: Codex Security Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm install @openai/codex-sdk
+      - name: Run Codex security review
+        run: npx codex-sdk review \
+          --schema .codex/security-schema.json \
+          --output findings.json
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - name: Gate on critical findings
+        run: |
+          CRITICAL=$(jq '[.[] | select(.severity == "critical")] | length' findings.json)
+          if [ "$CRITICAL" -gt 0 ]; then
+            echo "::error::$CRITICAL critical security findings—blocking merge."
+            exit 1
+          fi
