@@ -14,7 +14,7 @@ node tests/verify.cjs E
 ```
 
 Automated DOM checks exercise the actual inline application script with network
-requests blocked. They do not establish visual layout, native key default behavior,
+requests blocked. They do not establish visual layout, native key default behaviour,
 screen-reader usability, DevTools Offline, or browser PWA installation.
 
 | AGENTS.md checklist | A | B | C | D |
@@ -36,7 +36,7 @@ accessible choice labels, optional gloss, missing-symbol rejection and fallback.
 
 Actual DevTools Offline and PWA installation remain browser verification tasks.
 The later native Spacebar check below verifies storytelling and visible scan
-outlines; zoom/reflow, screen-reader behavior and other input modes remain pending.
+outlines; zoom/reflow, screen-reader behaviour and other input modes remain pending.
 
 Milestone D: 26 checks passed. Worker simulation verifies all four precache files,
 offline root/index/query-string navigation, cached installation assets, ignoring
@@ -84,7 +84,7 @@ claiming the full AGENTS.md checklist complete.
 
 ## Deterministic scan-loop revision
 
-The reading-delay behavior in the original milestone results above is superseded.
+The reading-delay behaviour in the original milestone results above is superseded.
 The current loop has one `scanIndex`, one `setInterval`, a configurable body
 `data-scan-interval`, and a `selectCurrent()` entry point for Space/Enter. It clears
 the old interval before activation, parks focus on a connected control during
@@ -132,7 +132,7 @@ were assessed from the rendered page, screenshots and actual Space-triggered
 actions. Exact DOM focus/`aria-current` alignment, held-key protection and stale
 timer rejection remain covered by the automated tests, rather than newly claimed
 as separate manual passes. This run does not establish DevTools Offline, hosted
-service-worker behavior, installed-PWA operation, 200% zoom/reflow or screen-reader
+service-worker behaviour, installed-PWA operation, 200% zoom/reflow or screen-reader
 usability. Optional sync verification is recorded separately below.
 
 ## Best-effort progress sync — 2026-11-12
