@@ -202,7 +202,7 @@ CI job runs the deterministic verification suite with pinned QA dependencies.
 focus-spacing fix. The security-contract suite previously passed all five tests.
 The versioned progress migration and rollback-only ownership/CAS SQL checks were
 applied and exercised through Supabase. SDK mocks do not establish real classroom
-anonymous-auth or screen-reader behavior.
+anonymous-auth or screen-reader behaviour.
 
 Native Edge Beta manual testing reached both story endings, Back, Restart and the
 waiting worker update using Spacebar. Cached reload and saved-state recovery worked
